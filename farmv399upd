@@ -1,5 +1,5 @@
 -- Optional globals from executor:
--- Webhook = "https://discord.com/api/webhooks/...."
+-- Webhook = "https://discord.com/api/webhooks/..."
 -- AutoExecute = true
 
 -- Pipe optional Webhook into getgenv()
@@ -16,14 +16,14 @@ pcall(function()
     end
 end)
 
--- Re-queue friend loader across teleports (executor env)
+-- Re-queue friend loader across teleports (executor env) [queue_on_teleport]
 pcall(function()
     if queue_on_teleport then
         queue_on_teleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/hellattexyss/testfarm/refs/heads/main/farmv399upd"))()')
     end
-end)  -- queue_on_teleport [17]
+end)  -- queue_on_teleport integration [24]
 
--- Place‑scoped lobby TeleportEvent cycler
+-- Place‑scoped lobby TeleportEvent cycler (only if lobby) 
 pcall(function()
     if game.PlaceId == 79546208627805 then
         local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -44,15 +44,15 @@ pcall(function()
 end)
 
 --// Services
-local Players = game:GetService("Players")   -- UI host [18]
+local Players = game:GetService("Players")   -- UI host
 local TweenService = game:GetService("TweenService")
-local StarterGui = game:GetService("StarterGui")  -- SetCore clipboard fallback [3]
+local StarterGui = game:GetService("StarterGui")  -- SetCore clipboard fallback
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
 -- Player/UI
 local player = Players.LocalPlayer
-local PlayerGui = player:WaitForChild("PlayerGui")  -- ensure client UI [18]
+local PlayerGui = player:WaitForChild("PlayerGui")  -- ensure client UI [25]
 
 -- Simple blur intro
 local Blur = Instance.new("BlurEffect")
@@ -205,7 +205,7 @@ task.spawn(function()
     tween(Glow, TweenInfo.new(0.26, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {ImageTransparency = 0.86})
 end)
 
--- Clipboard pipeline using SetCore fallback (optional) [3]
+-- Clipboard pipeline using SetCore fallback (optional) 
 local DISCORD_LINK = "https://discord.gg/overhub"
 local HiddenCopyBox = Instance.new("TextBox")
 HiddenCopyBox.Size = UDim2.new(0, 1, 0, 1)
@@ -278,7 +278,7 @@ end)
 -- Expose UI for core
 _G.OverhubUI = { Root = Root, DiamondCountLabel = DiamondCountLabel }
 -- END OF SNIPPET 1
--- Updated Autofarm core (farmv399upd) bound to OverHub GUI
+-- Updated Autofarm core bound to OverHub GUI
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -298,7 +298,32 @@ local diamondsCollectedThisServer = 0
 local webhookSentThisServer = false
 local collectedDiamonds = {}
 
--- Diamond counter binding
+-- Request provider normalization (executors)
+local function getRequester()
+    return (syn and syn.request)
+        or (http and http.request)
+        or (fluxus and fluxus.request)
+        or request
+        or http_request
+        or nil
+end
+local function postWebhook(url, jsonBody)
+    local req = getRequester()
+    if req then
+        return pcall(function()
+            return req({
+                Url = url,
+                Method = "POST",
+                Headers = {["Content-Type"] = "application/json"},
+                Body = jsonBody
+            })
+        end)
+    else
+        return false, "no_request_api"
+    end
+end
+
+-- Diamond counter binding (Interface.DiamondCount.Count)
 local function getDiamondCount()
     local ok, result = pcall(function()
         local obj = Players[username].PlayerGui.Interface.DiamondCount.Count
@@ -323,25 +348,37 @@ local function setupDiamondListener()
         while true do updateDiamondDisplay(); task.wait(1) end
     end)
 end
-task.spawn(setupDiamondListener)  -- live sync [18]
+task.spawn(setupDiamondListener)  -- live sync
 
--- Optional webhook per hop
-local function sendWebhook()
-    if not getgenv().WebhookURL or getgenv().WebhookURL == "" then return end
-    if diamondsCollectedThisServer == 0 then return end
-    if webhookSentThisServer then return end
-    webhookSentThisServer = true
-    local json = HttpService:JSONEncode({
-        content = string.format("💎 Diamond Collection Report\n👤 Player: %s (@%s)\n🌐 Server ID: ||%s||\n💰 Current Balance: %d\n📊 Collected This Session: %d\n⏰ Time: %s",
-            displayName, username, game.JobId, getDiamondCount(), diamondsCollectedThisServer, os.date("%Y-%m-%d %H:%M:%S"))
-    })
-    pcall(function()
-        if request then
-            request({Url = getgenv().WebhookURL, Method = "POST", Headers = {["Content-Type"]="application/json"}, Body = json})
-        else
-            game:HttpGet(getgenv().WebhookURL, {Method="POST", Headers={["Content-Type"]="application/json"}, Body=json})
-        end
-    end)
+-- Webhook logic (optional; robust POST + throttle)
+local lastWebhookAt = 0
+local firstPickupSent = false
+local function sendWebhook(kind)
+    local url = getgenv().WebhookURL
+    if not url or url == "" then return end
+    -- avoid spamming Discord (simple 5s throttle)
+    local now = tick()
+    if now - lastWebhookAt < 5 then return end
+
+    local payload = {
+        content = string.format(
+            "💎 %s\n👤 %s (@%s)\n📊 Session: %d\n💰 Balance: %d\n🌐 Job: ||%s||\n⏰ %s",
+            kind or "Diamond update",
+            displayName, username,
+            diamondsCollectedThisServer,
+            (getDiamondCount() or 0),
+            game.JobId,
+            os.date("%Y-%m-%d %H:%M:%S")
+        )
+    }
+    local ok = postWebhook(url, HttpService:JSONEncode(payload))
+    if ok then lastWebhookAt = now end
+end
+local function sendOnFirstPickup()
+    if not firstPickupSent and (diamondsCollectedThisServer or 0) > 0 then
+        firstPickupSent = true
+        sendWebhook("First pickup ✅")
+    end
 end
 
 -- HRP
@@ -354,12 +391,14 @@ lp.CharacterAdded:Connect(updateHRP)
 
 local activeDiamonds = {}
 
--- Faster collector
+-- Faster collector (+ first-pickup webhook)
 local function collectDiamond(d)
     if activeDiamonds[d] or collectedDiamonds[d] then return end
     activeDiamonds[d] = true
     collectedDiamonds[d] = true
     diamondsCollectedThisServer += 1
+    sendOnFirstPickup()
+
     task.spawn(function()
         while d.Parent and hrp do
             pcall(takeDiamonds.FireServer, takeDiamonds, d)
@@ -428,10 +467,11 @@ local function teleportToChest()
     return false
 end
 
--- Server hop (public servers API → random instance)
+-- Server hop (public servers API → random instance); webhook before hop
 local function hopServer()
     if Label then Label.Text = "Finding server..." end
-    pcall(sendWebhook)
+    sendWebhook("Hopping to new server…")
+
     local servers = {}
     local ok, result = pcall(function()
         local url = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?sortOrder=Asc&limit=100"
@@ -443,7 +483,7 @@ local function hopServer()
             if s.playing < s.maxPlayers and s.id ~= game.JobId then table.insert(servers, s.id) end
         end
         if #servers > 0 then
-            TeleportService:TeleportToPlaceInstance(placeId, servers[math.random(1, #servers)], lp)
+            TeleportService:TeleportToPlaceInstance(placeId, servers[math.random(1, #servers)], lp)  -- same place hop [teleport docs]
             return true
         else
             TeleportService:Teleport(placeId, lp); return true
@@ -521,6 +561,7 @@ function startFarm()
 
             if (getgenv().MaxServerTime or 15) > 0 and (tick() - serverStart) > (getgenv().MaxServerTime or 15) then
                 if Label then Label.Text = "Auto-hopping (timeout)" end
+                sendWebhook("Auto-hop (timeout)")
                 hopWithAuto()
                 serverStart = tick()
                 task.wait(2)
@@ -529,7 +570,7 @@ function startFarm()
 
             if isDead() then
                 if Label then Label.Text = "Dead, hopping..." end
-                pcall(sendWebhook)
+                sendWebhook("Death hop")
                 hopWithAuto()
                 serverStart = tick()
                 task.wait(5)
@@ -552,7 +593,7 @@ function startFarm()
                 if hopCount >= 3 then
                     hopCount = 0
                     task.wait(1)
-                    pcall(sendWebhook)
+                    sendWebhook("Periodic hop")
                     hopWithAuto()
                     serverStart = tick()
                     task.wait(3)
@@ -566,12 +607,13 @@ function startFarm()
     end)
 end
 
--- Teleport failure retry
+-- Teleport failure retry (and inform)
 TeleportService.TeleportInitFailed:Connect(function(player, result, err)
     if Label then Label.Text = "Teleport failed" end
+    sendWebhook("Teleport failed; retrying")
     task.wait(2)
     hopWithAuto()
-end)  -- client retry pattern [7]
+end)  -- client retry pattern
 
 setupAutoExec()
 startFarm()
