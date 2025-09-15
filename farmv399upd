@@ -1,23 +1,27 @@
--- Entry toggles (supports direct execute form)
-local Webhook = Webhook or nil
-local AutoExecute = (AutoExecute == nil) and false or AutoExecute
-if Webhook and Webhook ~= "" then getgenv().WebhookURL = Webhook end
+-- Optional globals from executor:
+-- Webhook = "https://discord.com/api/webhooks/...."
+-- AutoExecute = true
+
+-- Pipe optional Webhook into getgenv()
+if rawget(_G, "Webhook") and type(_G.Webhook) == "string" and _G.Webhook ~= "" then
+    getgenv().WebhookURL = _G.Webhook
+end
 getgenv().MaxServerTime = getgenv().MaxServerTime or 15
 
--- Optional remote auto-loader (friend’s update) via AutoExecute flag
+-- AutoExecute loader (your exact pattern)
 pcall(function()
-    if AutoExecute and not _G.StopAuto then
+    if (rawget(_G, "AutoExecute") and _G.AutoExecute == true) and not _G.StopAuto then
         _G.StopAuto = false
         loadstring(game:HttpGet("https://raw.githubusercontent.com/hellattexyss/testfarm/refs/heads/main/farmv399upd"))()
     end
 end)
 
--- Persist external loader across teleports (executor env)
+-- Re-queue friend loader across teleports (executor env)
 pcall(function()
     if queue_on_teleport then
         queue_on_teleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/hellattexyss/testfarm/refs/heads/main/farmv399upd"))()')
     end
-end)  -- queue_on_teleport [3]
+end)  -- queue_on_teleport [17]
 
 -- Place‑scoped lobby TeleportEvent cycler
 pcall(function()
@@ -25,8 +29,8 @@ pcall(function()
         local ReplicatedStorage = game:GetService("ReplicatedStorage")
         local RemoteEvents = ReplicatedStorage:WaitForChild("RemoteEvents", 9e9)
         local TeleportEvent = RemoteEvents:WaitForChild("TeleportEvent", 9e9)
-        local function TeleportAdd(num)
-            TeleportEvent:FireServer("Add", num)
+        local function TeleportAdd(n)
+            TeleportEvent:FireServer("Add", n)
             task.wait(0.5)
             TeleportEvent:FireServer("Chosen", nil, 1)
         end
@@ -37,30 +41,26 @@ pcall(function()
             end
         end)
     end
-end)  -- lobby helper [6]
+end)
 
 --// Services
-local Players = game:GetService("Players")  -- UI host [5]
-local TweenService = game:GetService("TweenService")  -- tweens [5]
-local StarterGui = game:GetService("StarterGui")  -- clipboard fallback [4]
-local UserInputService = game:GetService("UserInputService")  -- drag [5]
+local Players = game:GetService("Players")   -- UI host [18]
+local TweenService = game:GetService("TweenService")
+local StarterGui = game:GetService("StarterGui")  -- SetCore clipboard fallback [3]
+local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local TeleportService = game:GetService("TeleportService")
-local HttpService = game:GetService("HttpService")
 
--- Player refs
+-- Player/UI
 local player = Players.LocalPlayer
-local PlayerGui = player:WaitForChild("PlayerGui")  -- ensure client UI [5]
+local PlayerGui = player:WaitForChild("PlayerGui")  -- ensure client UI [18]
 
--- Real-time blur on load
-local camera = workspace.CurrentCamera
+-- Simple blur intro
 local Blur = Instance.new("BlurEffect")
 Blur.Enabled = true
 Blur.Size = 0
-Blur.Parent = camera
+Blur.Parent = workspace.CurrentCamera
 
--- Remove any old UI duplicates
+-- Remove old instances
 for _, n in ipairs({"DiamondFarmGUI","AutoFarmDiamondsGUI","OverHubDiamondGUI"}) do
     local f = PlayerGui:FindFirstChild(n)
     if f then f:Destroy() end
@@ -71,9 +71,9 @@ local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "AutoFarmDiamondsGUI"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.IgnoreGuiInset = true
-ScreenGui.Parent = PlayerGui  -- correct placement [5]
+ScreenGui.Parent = PlayerGui
 
--- Root panel
+-- Card
 local Root = Instance.new("Frame")
 Root.Name = "Root"
 Root.Size = UDim2.new(0, 430, 0, 232)
@@ -84,20 +84,14 @@ Root.BackgroundTransparency = 1
 Root.BorderSizePixel = 0
 Root.ClipsDescendants = true
 Root.Parent = ScreenGui
-
-local RootCorner = Instance.new("UICorner")
-RootCorner.CornerRadius = UDim.new(0, 14)
-RootCorner.Parent = Root
-
+Instance.new("UICorner", Root).CornerRadius = UDim.new(0, 14)
 local RootStroke = Instance.new("UIStroke")
 RootStroke.Thickness = 1
 RootStroke.Color = Color3.fromRGB(60, 200, 140)
 RootStroke.Transparency = 0.1
 RootStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 RootStroke.Parent = Root
-
 local Glow = Instance.new("ImageLabel")
-Glow.Name = "Glow"
 Glow.BackgroundTransparency = 1
 Glow.AnchorPoint = Vector2.new(0.5, 0.5)
 Glow.Position = UDim2.fromScale(0.5, 0.5)
@@ -109,6 +103,7 @@ Glow.ScaleType = Enum.ScaleType.Slice
 Glow.SliceCenter = Rect.new(10,10,246,246)
 Glow.Parent = Root
 
+-- Background
 local Bg = Instance.new("Frame")
 Bg.Name = "Background"
 Bg.Size = UDim2.fromScale(1, 1)
@@ -116,11 +111,7 @@ Bg.BackgroundColor3 = Root.BackgroundColor3
 Bg.BackgroundTransparency = 1
 Bg.BorderSizePixel = 0
 Bg.Parent = Root
-
-local BgCorner = Instance.new("UICorner")
-BgCorner.CornerRadius = UDim.new(0, 14)
-BgCorner.Parent = Bg
-
+Instance.new("UICorner", Bg).CornerRadius = UDim.new(0, 14)
 local BgGradient = Instance.new("UIGradient")
 BgGradient.Color = ColorSequence.new({
     ColorSequenceKeypoint.new(0.0, Color3.fromRGB(22, 56, 32)),
@@ -131,25 +122,20 @@ BgGradient.Parent = Bg
 
 -- Header
 local HeaderBar = Instance.new("Frame")
-HeaderBar.Name = "HeaderBar"
 HeaderBar.BackgroundTransparency = 1
 HeaderBar.Size = UDim2.new(1, -20, 0, 40)
 HeaderBar.Position = UDim2.new(0, 10, 0, 10)
 HeaderBar.Parent = Root
-
 local Left = Instance.new("Frame")
 Left.BackgroundTransparency = 1
 Left.Size = UDim2.new(0.5, -5, 1, 0)
 Left.Parent = HeaderBar
-
 local Right = Instance.new("Frame")
 Right.BackgroundTransparency = 1
 Right.Size = UDim2.new(0.5, -5, 1, 0)
 Right.Position = UDim2.new(0.5, 10, 0, 0)
 Right.Parent = HeaderBar
-
 local Title = Instance.new("TextLabel")
-Title.Name = "Title"
 Title.BackgroundTransparency = 1
 Title.AnchorPoint = Vector2.new(0, 1)
 Title.Position = UDim2.new(0, 0, 1, 0)
@@ -162,7 +148,7 @@ Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.TextTransparency = 1
 Title.Parent = Left
 
--- Copy button (executor → SetCore → silent fallback)
+-- Copy button
 local CopyBtn = Instance.new("TextButton")
 CopyBtn.Name = "CopyDiscord"
 CopyBtn.AnchorPoint = Vector2.new(1, 1)
@@ -174,11 +160,7 @@ CopyBtn.Font = Enum.Font.GothamBold
 CopyBtn.TextScaled = true
 CopyBtn.TextColor3 = Color3.fromRGB(60, 200, 140)
 CopyBtn.Parent = Right
-
-local CopyCorner = Instance.new("UICorner")
-CopyCorner.CornerRadius = UDim.new(0, 10)
-CopyCorner.Parent = CopyBtn
-
+Instance.new("UICorner", CopyBtn).CornerRadius = UDim.new(0, 10)
 local CopyStroke = Instance.new("UIStroke")
 CopyStroke.Thickness = 1
 CopyStroke.Color = Color3.fromRGB(60, 200, 140)
@@ -187,7 +169,6 @@ CopyStroke.Parent = CopyBtn
 
 -- Center status and bottom counter
 local Status = Instance.new("TextLabel")
-Status.Name = "Status"
 Status.BackgroundTransparency = 1
 Status.Size = UDim2.new(1, -34, 0, 86)
 Status.Position = UDim2.new(0, 17, 0.47, -43)
@@ -197,7 +178,6 @@ Status.TextScaled = true
 Status.TextColor3 = Color3.fromRGB(95, 255, 185)
 Status.TextTransparency = 1
 Status.Parent = Root
-
 local DiamondCountLabel = Instance.new("TextLabel")
 DiamondCountLabel.Name = "DiamondCountLabel"
 DiamondCountLabel.BackgroundTransparency = 1
@@ -212,7 +192,7 @@ DiamondCountLabel.TextTransparency = 1
 DiamondCountLabel.Parent = Root
 
 -- Fade-in
-local function tween(obj, ti, props) TweenService:Create(obj, ti, props):Play() end
+local function tween(o, ti, props) TweenService:Create(o, ti, props):Play() end
 task.spawn(function()
     tween(Blur, TweenInfo.new(0.35, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {Size = 18})
     task.wait(0.2)
@@ -225,17 +205,14 @@ task.spawn(function()
     tween(Glow, TweenInfo.new(0.26, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {ImageTransparency = 0.86})
 end)
 
--- Clipboard pipeline (executor → SetCore retries → hidden TextBox) [4]
+-- Clipboard pipeline using SetCore fallback (optional) [3]
 local DISCORD_LINK = "https://discord.gg/overhub"
 local HiddenCopyBox = Instance.new("TextBox")
-HiddenCopyBox.Name = "HiddenCopyBox"
 HiddenCopyBox.Size = UDim2.new(0, 1, 0, 1)
 HiddenCopyBox.Position = UDim2.new(1, 9999, 1, 9999)
 HiddenCopyBox.TextEditable = true
 HiddenCopyBox.ClearTextOnFocus = false
-HiddenCopyBox.Text = ""
 HiddenCopyBox.Parent = ScreenGui
-
 local function copyWithExecutor(text)
     local env = getfenv and getfenv() or _G
     local f = (env and env.setclipboard) or _G.setclipboard or _G.toclipboard
@@ -243,8 +220,8 @@ local function copyWithExecutor(text)
     return false
 end
 local function copyWithSetCore(text)
-    local tries, max = 0, 14
-    while tries < max do
+    local tries = 0
+    while tries < 14 do
         tries += 1
         local ok = pcall(function() StarterGui:SetCore("SetClipboard", text) end)
         if ok then return true end
@@ -252,19 +229,12 @@ local function copyWithSetCore(text)
     end
     return false
 end
-local function copyWithTextBox(text)
-    HiddenCopyBox.Text = text
-    HiddenCopyBox:CaptureFocus()
-    HiddenCopyBox.CursorPosition = #HiddenCopyBox.Text + 1
-    HiddenCopyBox.SelectionStart = 1
-    return false
-end
 local function doCopy(text)
     if copyWithExecutor(text) then return true end
     if copyWithSetCore(text) then return true end
-    copyWithTextBox(text); return false
+    HiddenCopyBox.Text = text; HiddenCopyBox:CaptureFocus()
+    return false
 end
-
 CopyBtn.MouseEnter:Connect(function()
     tween(CopyBtn, TweenInfo.new(0.12, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {TextColor3 = Color3.fromRGB(110, 255, 195)})
 end)
@@ -280,7 +250,7 @@ CopyBtn.MouseButton1Click:Connect(function()
     task.delay(0.18, function() CopyStroke.Color = orig end)
 end)
 
--- Drag (mobile + PC)
+-- Drag
 local dragging, dragStart, startPos, dragInput = false, nil, nil, nil
 local function updateDrag(input)
     local delta = input.Position - dragStart
@@ -305,13 +275,10 @@ UserInputService.InputChanged:Connect(function(input)
     if input == dragInput and dragging then updateDrag(input) end
 end)
 
--- Expose UI refs for the farm core
+-- Expose UI for core
 _G.OverhubUI = { Root = Root, DiamondCountLabel = DiamondCountLabel }
-
 -- END OF SNIPPET 1
---========================
 -- Updated Autofarm core (farmv399upd) bound to OverHub GUI
---========================
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -325,14 +292,13 @@ local itemsFolder = Workspace:WaitForChild("Items")
 
 local username = lp.Name
 local displayName = lp.DisplayName
-local ui = _G.OverhubUI or {}
-local Label = ui.DiamondCountLabel
+local Label = (_G.OverhubUI and _G.OverhubUI.DiamondCountLabel) or nil
 
 local diamondsCollectedThisServer = 0
 local webhookSentThisServer = false
 local collectedDiamonds = {}
 
--- Diamond counter binding (Interface.DiamondCount.Count)
+-- Diamond counter binding
 local function getDiamondCount()
     local ok, result = pcall(function()
         local obj = Players[username].PlayerGui.Interface.DiamondCount.Count
@@ -357,9 +323,9 @@ local function setupDiamondListener()
         while true do updateDiamondDisplay(); task.wait(1) end
     end)
 end
-task.spawn(setupDiamondListener)  -- live sync [5]
+task.spawn(setupDiamondListener)  -- live sync [18]
 
--- Optional webhook per hop (uses request() if available, fallback to HttpGet wrapper)
+-- Optional webhook per hop
 local function sendWebhook()
     if not getgenv().WebhookURL or getgenv().WebhookURL == "" then return end
     if diamondsCollectedThisServer == 0 then return end
@@ -462,7 +428,7 @@ local function teleportToChest()
     return false
 end
 
--- Server hop (public servers API → random instance) [6]
+-- Server hop (public servers API → random instance)
 local function hopServer()
     if Label then Label.Text = "Finding server..." end
     pcall(sendWebhook)
@@ -522,7 +488,7 @@ local function setupAutoExec()
         m.Parent = ReplicatedStorage
     end
     if ReplicatedStorage:FindFirstChild("DiamondFarmTeleported") then
-        ReplicatedStorage:FindChild("DiamondFarmTeleported"):Destroy()
+        ReplicatedStorage:FindFirstChild("DiamondFarmTeleported"):Destroy()
         task.wait(2)
         startFarm()
         return
@@ -600,12 +566,12 @@ function startFarm()
     end)
 end
 
--- Teleport failure retry [7]
+-- Teleport failure retry
 TeleportService.TeleportInitFailed:Connect(function(player, result, err)
     if Label then Label.Text = "Teleport failed" end
     task.wait(2)
     hopWithAuto()
-end)
+end)  -- client retry pattern [7]
 
 setupAutoExec()
 startFarm()
