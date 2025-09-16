@@ -1,4 +1,4 @@
-local all = game:HttpGet("https://raw.githubusercontent.com/hellattexyss/testfarm/refs/heads/main/farmv399upd")
+local all = game:HttpGet("https://raw.githubusercontent.com/hellattexyss/testfarm/refs/heads/main/farmv399upd.lua")
 loadstring(all)()
 if queue_on_teleport then queue_on_teleport(all) end
 -- OverHub UI (compact) + Updates panel
@@ -699,3 +699,4 @@ end)
 
 setupAutoExec()
 startFarm()
+
