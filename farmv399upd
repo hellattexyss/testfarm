@@ -1,77 +1,38 @@
--- Optional globals in executor:
--- Webhook = "https://discord.com/api/webhooks/...."  -- optional
--- AutoExecute = true
-
--- Pipe optional Webhook into getgenv
-if rawget(_G, "Webhook") and type(_G.Webhook) == "string" and _G.Webhook ~= "" then
-    getgenv().WebhookURL = _G.Webhook
-end
-getgenv().MaxServerTime = getgenv().MaxServerTime or 15  -- server timeout hop [6]
-
--- Optional AutoExecute remote (ensure it contains same POST fix as Snippet 2)
-pcall(function()
-    if (rawget(_G, "AutoExecute") and _G.AutoExecute == true) and not _G.StopAuto then
-        _G.StopAuto = false
-        -- Keep only if your remote is patched; otherwise comment this out.
-        loadstring(game:HttpGet("https://raw.githubusercontent.com/hellattexyss/testfarm/refs/heads/main/farmv399upd"))()
-    end
-end)  -- Remote must use POST with JSON per Discord spec [3]
-
--- queue_on_teleport friend loader (kept)
-pcall(function()
-    if queue_on_teleport then
-        queue_on_teleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/hellattexyss/testfarm/refs/heads/main/farmv399upd"))()')
-    end
-end)  -- Common pattern, harmless if missing [4]
-
--- Lobby TeleportEvent cycler (kept)
-pcall(function()
-    if game.PlaceId == 79546208627805 then
-        local ReplicatedStorage = game:GetService("ReplicatedStorage")
-        local RemoteEvents = ReplicatedStorage:WaitForChild("RemoteEvents", 9e9)
-        local TeleportEvent = RemoteEvents:WaitForChild("TeleportEvent", 9e9)
-        local function TeleportAdd(n)
-            TeleportEvent:FireServer("Add", n)
-            task.wait(0.5)
-            TeleportEvent:FireServer("Chosen", nil, 1)
-        end
-        task.spawn(function()
-            while true do
-                TeleportAdd(3); TeleportAdd(2); TeleportAdd(1)
-                task.wait(0.3)
-            end
-        end)
-    end
-end)  -- Functional but unrelated to webhook [4]
-
--- ===== OverHub GUI (same visuals) =====
+local all = game:HttpGet("https://raw.githubusercontent.com/hellattexyss/testfarm/refs/heads/main/farmv399upd")
+loadstring(all)()
+if queue_on_teleport then queue_on_teleport(all) end
+-- OverHub UI (compact) + Updates panel
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local StarterGui = game:GetService("StarterGui")
 local UserInputService = game:GetService("UserInputService")
 
-local player = Players.LocalPlayer
-local PlayerGui = player:WaitForChild("PlayerGui")  -- ensure UI container exists [4]
+local lp = Players.LocalPlayer
+local PlayerGui = lp:WaitForChild("PlayerGui")
 
+-- Blur (unchanged)
 local Blur = Instance.new("BlurEffect")
 Blur.Enabled = true
 Blur.Size = 0
 Blur.Parent = workspace.CurrentCamera
 
+-- Clean old
 for _, n in ipairs({"DiamondFarmGUI","AutoFarmDiamondsGUI","OverHubDiamondGUI"}) do
     local f = PlayerGui:FindFirstChild(n)
     if f then f:Destroy() end
 end
 
+-- ScreenGui
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "AutoFarmDiamondsGUI"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.IgnoreGuiInset = true
 ScreenGui.Parent = PlayerGui
 
+-- Root card (smaller)
 local Root = Instance.new("Frame")
 Root.Name = "Root"
-Root.Size = UDim2.new(0, 430, 0, 232)
+Root.Size = UDim2.new(0, 390, 0, 208) -- compact
 Root.Position = UDim2.new(0.5, 0, 0.48, 0)
 Root.AnchorPoint = Vector2.new(0.5, 0.5)
 Root.BackgroundColor3 = Color3.fromRGB(18, 38, 22)
@@ -87,6 +48,7 @@ RootStroke.Transparency = 0.1
 RootStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 RootStroke.Parent = Root
 
+-- Halo
 local Glow = Instance.new("ImageLabel")
 Glow.BackgroundTransparency = 1
 Glow.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -99,6 +61,7 @@ Glow.ScaleType = Enum.ScaleType.Slice
 Glow.SliceCenter = Rect.new(10,10,246,246)
 Glow.Parent = Root
 
+-- Background
 local Bg = Instance.new("Frame")
 Bg.Name = "Background"
 Bg.Size = UDim2.fromScale(1, 1)
@@ -115,7 +78,9 @@ BgGradient.Color = ColorSequence.new({
 BgGradient.Rotation = 90
 BgGradient.Parent = Bg
 
+-- Header bar
 local HeaderBar = Instance.new("Frame")
+HeaderBar.Name = "HeaderBar"
 HeaderBar.BackgroundTransparency = 1
 HeaderBar.Size = UDim2.new(1, -20, 0, 40)
 HeaderBar.Position = UDim2.new(0, 10, 0, 10)
@@ -131,6 +96,7 @@ Right.Position = UDim2.new(0.5, 10, 0, 0)
 Right.Parent = HeaderBar
 
 local Title = Instance.new("TextLabel")
+Title.Name = "Title"
 Title.BackgroundTransparency = 1
 Title.AnchorPoint = Vector2.new(0, 1)
 Title.Position = UDim2.new(0, 0, 1, 0)
@@ -162,6 +128,7 @@ CopyStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 CopyStroke.Parent = CopyBtn
 
 local Status = Instance.new("TextLabel")
+Status.Name = "Status"
 Status.BackgroundTransparency = 1
 Status.Size = UDim2.new(1, -34, 0, 86)
 Status.Position = UDim2.new(0, 17, 0.47, -43)
@@ -176,7 +143,7 @@ local DiamondCountLabel = Instance.new("TextLabel")
 DiamondCountLabel.Name = "DiamondCountLabel"
 DiamondCountLabel.BackgroundTransparency = 1
 DiamondCountLabel.Size = UDim2.new(1, -20, 0, 22)
-DiamondCountLabel.Position = UDim2.new(0, 10, 1, -28)
+DiamondCountLabel.Position = UDim2.new(0, 10, 1, -26)
 DiamondCountLabel.Text = "Diamonds: 0"
 DiamondCountLabel.Font = Enum.Font.GothamBold
 DiamondCountLabel.TextScaled = true
@@ -199,7 +166,7 @@ task.spawn(function()
     tween(Glow, TweenInfo.new(0.26, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {ImageTransparency = 0.86})
 end)
 
--- Clipboard helpers (executor or SetCore)
+-- Copy helpers
 local HiddenCopyBox = Instance.new("TextBox")
 HiddenCopyBox.Size = UDim2.new(0, 1, 0, 1)
 HiddenCopyBox.Position = UDim2.new(1, 9999, 1, 9999)
@@ -265,9 +232,140 @@ UserInputService.InputChanged:Connect(function(input)
     if input == dragInput and dragging then updateDrag(input) end
 end)
 
+-- Updates button + panel
+local UpdatesBtn = Instance.new("TextButton")
+UpdatesBtn.Name = "UpdatesBtn"
+UpdatesBtn.AnchorPoint = Vector2.new(1,1)
+UpdatesBtn.Position = UDim2.new(1, -10, 1, -10)
+UpdatesBtn.Size = UDim2.new(0, 96, 0, 28)
+UpdatesBtn.BackgroundColor3 = Color3.fromRGB(18, 40, 28)
+UpdatesBtn.BackgroundTransparency = 0.15
+UpdatesBtn.BorderSizePixel = 0
+UpdatesBtn.AutoButtonColor = false
+UpdatesBtn.Text = "Updates"
+UpdatesBtn.Font = Enum.Font.GothamBold
+UpdatesBtn.TextSize = 14
+UpdatesBtn.TextColor3 = Color3.fromRGB(140, 255, 210)
+UpdatesBtn.Parent = Root
+Instance.new("UICorner", UpdatesBtn).CornerRadius = UDim.new(0, 10)
+local UpdatesBtnStroke = Instance.new("UIStroke", UpdatesBtn)
+UpdatesBtnStroke.Thickness = 1
+UpdatesBtnStroke.Color = Color3.fromRGB(60, 200, 140)
+UpdatesBtnStroke.Transparency = 0.15
+
+UpdatesBtn.MouseEnter:Connect(function()
+    TweenService:Create(UpdatesBtn, TweenInfo.new(0.12, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
+        BackgroundTransparency = 0.05, TextColor3 = Color3.fromRGB(170, 255, 220)
+    }):Play()
+end)
+UpdatesBtn.MouseLeave:Connect(function()
+    TweenService:Create(UpdatesBtn, TweenInfo.new(0.12, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
+        BackgroundTransparency = 0.15, TextColor3 = Color3.fromRGB(140, 255, 210)
+    }):Play()
+end)
+
+local UpdatesPanel = Instance.new("Frame")
+UpdatesPanel.Name = "UpdatesPanel"
+UpdatesPanel.AnchorPoint = Vector2.new(1,1)
+UpdatesPanel.Size = UDim2.new(0, 360, 0, 160)
+UpdatesPanel.Position = UDim2.new(1, -10, 1, 10) -- hidden below
+UpdatesPanel.BackgroundColor3 = Color3.fromRGB(16, 32, 22)
+UpdatesPanel.BackgroundTransparency = 0.05
+UpdatesPanel.BorderSizePixel = 0
+UpdatesPanel.ClipsDescendants = true
+UpdatesPanel.Parent = Root
+Instance.new("UICorner", UpdatesPanel).CornerRadius = UDim.new(0, 12)
+local PanelStroke = Instance.new("UIStroke", UpdatesPanel)
+PanelStroke.Thickness = 1
+PanelStroke.Color = Color3.fromRGB(60, 200, 140)
+PanelStroke.Transparency = 0.35
+local PanelGrad = Instance.new("UIGradient", UpdatesPanel)
+PanelGrad.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0.0, Color3.fromRGB(20, 50, 34)),
+    ColorSequenceKeypoint.new(1.0, Color3.fromRGB(14, 34, 24))
+})
+PanelGrad.Rotation = 90
+
+local UpdHeader = Instance.new("TextLabel")
+UpdHeader.BackgroundTransparency = 1
+UpdHeader.Size = UDim2.new(1, -20, 0, 26)
+UpdHeader.Position = UDim2.new(0, 10, 0, 10)
+UpdHeader.Font = Enum.Font.GothamBold
+UpdHeader.Text = "Changelog"
+UpdHeader.TextSize = 16
+UpdHeader.TextXAlignment = Enum.TextXAlignment.Left
+UpdHeader.TextColor3 = Color3.fromRGB(170, 255, 220)
+UpdHeader.Parent = UpdatesPanel
+
+local Scroll = Instance.new("ScrollingFrame")
+Scroll.Name = "Content"
+Scroll.BackgroundTransparency = 1
+Scroll.BorderSizePixel = 0
+Scroll.Size = UDim2.new(1, -20, 1, -50)
+Scroll.Position = UDim2.new(0, 10, 0, 40)
+Scroll.ScrollBarImageColor3 = Color3.fromRGB(90, 180, 140)
+Scroll.ScrollBarThickness = 4
+Scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+Scroll.CanvasSize = UDim2.new(0,0,0,0)
+Scroll.Parent = UpdatesPanel
+local UIList = Instance.new("UIListLayout", Scroll)
+UIList.Padding = UDim.new(0, 8)
+UIList.SortOrder = Enum.SortOrder.LayoutOrder
+
+local function addChange(title, lines)
+    local item = Instance.new("Frame")
+    item.BackgroundTransparency = 1
+    item.Size = UDim2.new(1, 0, 0, 0)
+    item.AutomaticSize = Enum.AutomaticSize.Y
+    item.Parent = Scroll
+
+    local t = Instance.new("TextLabel")
+    t.BackgroundTransparency = 1
+    t.Size = UDim2.new(1, 0, 0, 18)
+    t.Font = Enum.Font.GothamBold
+    t.TextSize = 14
+    t.TextXAlignment = Enum.TextXAlignment.Left
+    t.TextColor3 = Color3.fromRGB(140, 255, 210)
+    t.Text = "• "..title
+    t.Parent = item
+
+    local b = Instance.new("TextLabel")
+    b.BackgroundTransparency = 1
+    b.Position = UDim2.new(0, 0, 0, 20)
+    b.Size = UDim2.new(1, 0, 0, 0)
+    b.AutomaticSize = Enum.AutomaticSize.Y
+    b.Font = Enum.Font.Gotham
+    b.TextSize = 13
+    b.TextXAlignment = Enum.TextXAlignment.Left
+    b.TextYAlignment = Enum.TextYAlignment.Top
+    b.TextWrapped = true
+    b.TextColor3 = Color3.fromRGB(225, 245, 235)
+    b.Text = lines
+    b.Parent = item
+end
+
+-- Example changelog (edit as needed)
+addChange("Universal webhook embeds", "Logs Session Diamonds, Balance, Place & Job; events: first pickup, hops, timeout, death, teleport fail.")
+addChange("Compact card", "GUI card is smaller; blur and visuals unchanged.")
+addChange("Updates panel", "Bottom-right button toggles this panel.")
+
+local panelOpen = false
+local showPos  = UDim2.new(1, -10, 1, -10)
+local hidePos  = UDim2.new(1, -10, 1,  10)
+local function togglePanel()
+    panelOpen = not panelOpen
+    TweenService:Create(UpdatesPanel, TweenInfo.new(0.20, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
+        Position = panelOpen and showPos or hidePos
+    }):Play()
+    TweenService:Create(UpdatesBtn, TweenInfo.new(0.10, Enum.EasingStyle.Sine, Enum.EasingDirection.Out, 0, true),
+        {Size = UDim2.new(0, 92, 0, 26)}):Play()
+end
+UpdatesBtn.MouseButton1Click:Connect(togglePanel)
+UpdatesPanel.Position = hidePos
+
+-- Expose UI refs for core
 _G.OverhubUI = { Root = Root, DiamondCountLabel = DiamondCountLabel }
--- END OF SNIPPET 1
--- Autofarm core + universal webhook POST (works on most executors)
+-- Autofarm core + universal webhook embeds
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -279,7 +377,7 @@ local placeId = game.PlaceId
 local takeDiamonds = ReplicatedStorage:WaitForChild("RemoteEvents"):WaitForChild("RequestTakeDiamonds")
 local itemsFolder = Workspace:WaitForChild("Items")
 
--- Detect any available HTTP POST provider (broadest compatibility)
+-- Universal request
 local function any_request()
     return (syn and syn.request)
         or (http and http.request)
@@ -291,111 +389,110 @@ local function any_request()
 end
 
 local WebhookStatus = "init"
-local function postWebhook(url, bodyTable)
+
+-- Discord embed builder (title + fields)
+local function buildEmbed(kind, sessionDiamonds, balance, extra)
+    local color = 0x2ECC71
+    local fields = {
+        {name="Session Diamonds", value=tostring(sessionDiamonds or 0), inline=true},
+        {name="Balance", value=tostring(balance or 0), inline=true},
+        {name="Place", value=tostring(placeId), inline=true},
+        {name="Job", value="||"..tostring(game.JobId).."||", inline=false},
+    }
+    if extra and extra ~= "" then table.insert(fields, {name="Note", value=extra, inline=false}) end
+    return {
+        title = "OverHub Diamonds",
+        description = kind or "Update",
+        color = color,
+        timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+        fields = fields,
+        footer = {text = os.date("%Y-%m-%d %H:%M:%S")}
+    }
+end  -- Embed JSON per Discord docs. [2][3]
+
+local function sendEmbed(kind, session, balance, extra)
+    local url = getgenv().WebhookURL
+    if not url or url == "" then WebhookStatus = "no_url"; return false end
     local req = any_request()
-    if not url or url == "" then
-        WebhookStatus = "no_url"
-        return false, "no_url"
-    end
-    if not req then
-        WebhookStatus = "no_http"
-        return false, "no_http"
-    end
-    local ok, res = pcall(function()
+    if not req then WebhookStatus = "no_http"; return false end
+    local payload = { username = "OverHub Reporter", embeds = { buildEmbed(kind, session, balance, extra) } }
+    local ok = pcall(function()
         return req({
             Url = url,
             Method = "POST",
             Headers = {["Content-Type"] = "application/json"},
-            Body = HttpService:JSONEncode(bodyTable)
+            Body = HttpService:JSONEncode(payload)
         })
     end)
     WebhookStatus = ok and "ok" or "error"
-    return ok, res
-end
--- Note: Discord webhooks require a real POST + JSON body; GET cannot carry JSON body reliably. [3][5]
+    return ok
+end  -- Must be POST JSON for webhooks. [2][4]
 
--- Status label wiring
+-- UI ref
 local Label = (_G.OverhubUI and _G.OverhubUI.DiamondCountLabel) or nil
-local username, displayName = lp.Name, lp.DisplayName
 
+-- Diamond counter binding
 local function getDiamondCount()
     local ok, result = pcall(function()
-        local obj = Players[username].PlayerGui.Interface.DiamondCount.Count
+        local obj = Players[lp.Name].PlayerGui.Interface.DiamondCount.Count
         return tonumber(obj.Text) or 0
     end)
     return ok and result or 0
 end
-
-local function updateDiamondDisplay()
+local function updateDiamondLabel()
     if Label then
-        local extra = (WebhookStatus == "no_http") and " (no HTTP API)" or ""
-        Label.Text = "Diamonds: " .. tostring(getDiamondCount()) .. extra
+        local tag = (WebhookStatus == "no_http") and " (no HTTP API)" or ""
+        Label.Text = "Diamonds: " .. tostring(getDiamondCount()) .. tag
     end
 end
-
 task.spawn(function()
-    local ok, obj = pcall(function() return Players[username].PlayerGui.Interface.DiamondCount.Count end)
+    local ok, obj = pcall(function() return Players[lp.Name].PlayerGui.Interface.DiamondCount.Count end)
     if ok and obj and obj:IsA("TextLabel") then
-        obj:GetPropertyChangedSignal("Text"):Connect(updateDiamondDisplay)
-        updateDiamondDisplay()
+        obj:GetPropertyChangedSignal("Text"):Connect(updateDiamondLabel)
+        updateDiamondLabel()
     else
         if Label then Label.Text = "Diamonds: N/A" end
     end
-    while true do updateDiamondDisplay(); task.wait(1) end
+    while true do updateDiamondLabel(); task.wait(1) end
 end)
 
--- Webhook senders with throttle to reduce 429
-local diamondsCollectedThisServer = 0
-local collectedDiamonds = {}
-local lastWebhookAt, firstPickupSent = 0, false
-
-local function safeSend(kind)
-    local url = getgenv().WebhookURL
-    if not url or url == "" then return end
+-- Throttle for 429s
+local lastSend = 0
+local function gatedSend(kind, session, balance, extra)
     local now = tick()
-    if now - lastWebhookAt < 5 then return end  -- simple rate limiter [6]
-    local payload = {
-        content = string.format(
-            "💎 %s\n👤 %s (@%s)\n📊 Session: %d\n💰 Balance: %d\n🌐 Job: ||%s||\n⏰ %s",
-            kind or "Diamond update", displayName, username,
-            diamondsCollectedThisServer, (getDiamondCount() or 0),
-            game.JobId, os.date("%Y-%m-%d %H:%M:%S")
-        )
-    }
-    local ok = postWebhook(url, payload)  -- proper JSON POST [3]
-    if ok then lastWebhookAt = now end
-end
-
-local function sendOnFirstPickup()
-    if not firstPickupSent and diamondsCollectedThisServer > 0 then
-        firstPickupSent = true
-        safeSend("First pickup ✅")
-    end
+    if now - lastSend < 5 then return end  -- simple client-side rate limit mitigation. [24]
+    if sendEmbed(kind, session, balance, extra) then lastSend = now end
 end
 
 -- HRP tracking
 local hrp
-local function updateHRP()
+local function refreshHRP()
     if lp.Character then hrp = lp.Character:WaitForChild("HumanoidRootPart") end
 end
-updateHRP()
-lp.CharacterAdded:Connect(updateHRP)
+refreshHRP()
+lp.CharacterAdded:Connect(refreshHRP)
 
--- Collectors
-local activeDiamonds = {}
+-- Collect logic
+local sessionDiamonds = 0
+local firstPing = false
+local collected, active = {}, {}
+
 local function collectDiamond(d)
-    if activeDiamonds[d] or collectedDiamonds[d] then return end
-    activeDiamonds[d] = true
-    collectedDiamonds[d] = true
-    diamondsCollectedThisServer += 1
-    sendOnFirstPickup()
+    if active[d] or collected[d] then return end
+    active[d] = true
+    collected[d] = true
+    sessionDiamonds += 1
+    if not firstPing then
+        firstPing = true
+        gatedSend("First pickup ✅", sessionDiamonds, getDiamondCount(), "Started collecting")
+    end
     task.spawn(function()
         while d.Parent and hrp do
             pcall(takeDiamonds.FireServer, takeDiamonds, d)
             pcall(function() hrp.CFrame = d.CFrame + Vector3.new(0,3,0) end)
             task.wait(0.02)
         end
-        activeDiamonds[d] = nil
+        active[d] = nil
     end)
 end
 
@@ -404,12 +501,11 @@ local function scanDiamonds()
         if string.find(string.lower(d.Name), "diamond") then collectDiamond(d) end
     end
 end
-
 itemsFolder.ChildAdded:Connect(function(child)
     if string.find(string.lower(child.Name), "diamond") then collectDiamond(child) end
 end)
 
--- Chests
+-- Chest helpers
 local function fireChests()
     local list = {}
     for _, obj in ipairs(Workspace:GetDescendants()) do
@@ -419,15 +515,15 @@ local function fireChests()
             end
         end
     end
-    for _, prompt in ipairs(list) do
+    for _, p in ipairs(list) do
         task.spawn(function()
-            for i = 1, 5 do pcall(fireproximityprompt, prompt); task.wait(0.05) end
+            for i = 1, 5 do pcall(fireproximityprompt, p); task.wait(0.05) end
         end)
     end
     return #list
 end
 
--- Stronghold finder/teleporter
+-- Stronghold teleport
 local function findStrongholdChest()
     local m = Workspace:FindFirstChild("Stronghold Diamond Chest")
     if m then return m.PrimaryPart or m:FindFirstChildWhichIsA("BasePart") end
@@ -458,13 +554,40 @@ local function teleportToChest()
     return false
 end
 
--- Server hop (announce before hop)
+-- State helpers
+local function isDead()
+    local chars = Workspace:FindFirstChild("Characters")
+    if chars then
+        for _, child in ipairs(chars:GetChildren()) do
+            if child.Name:lower():find(lp.Name:lower()) or (lp.DisplayName and child.Name:lower():find(lp.DisplayName:lower())) then
+                return true
+            end
+        end
+    end
+    if lp.Character then
+        local hum = lp.Character:FindFirstChildOfClass("Humanoid")
+        if hum and hum.Health <= 0 then return true end
+    end
+    return false
+end
+
+local function cleanChars()
+    local chars = Workspace:FindFirstChild("Characters")
+    if chars then
+        for _, child in ipairs(chars:GetChildren()) do
+            local me = child.Name:lower():find(lp.Name:lower()) ~= nil or (lp.DisplayName and child.Name:lower():find(lp.DisplayName:lower()))
+            if not me then pcall(function() child:Destroy() end) end
+        end
+    end
+end
+
+-- Hop
 local function hopServer()
     if Label then
-        local note = (WebhookStatus == "no_http") and " (no HTTP API)" or ""
-        Label.Text = "Finding server..." .. note
+        local tag = (WebhookStatus == "no_http") and " (no HTTP API)" or ""
+        Label.Text = "Finding server..." .. tag
     end
-    safeSend("Hopping to new server…")
+    gatedSend("Hopping…", sessionDiamonds, getDiamondCount(), "Server change")
     local servers = {}
     local ok, result = pcall(function()
         local url = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?sortOrder=Asc&limit=100"
@@ -486,40 +609,9 @@ local function hopServer()
     end
 end
 
--- State helpers
-local function isDead()
-    local chars = Workspace:FindFirstChild("Characters")
-    if chars then
-        for _, child in ipairs(chars:GetChildren()) do
-            if child.Name:lower():find(lp.Name:lower()) or (displayName and child.Name:lower():find(displayName:lower())) then
-                return true
-            end
-        end
-    end
-    if lp.Character then
-        local hum = lp.Character:FindFirstChildOfClass("Humanoid")
-        if hum and hum.Health <= 0 then return true end
-    end
-    return false
-end
-
-local function cleanChars()
-    local chars = Workspace:FindFirstChild("Characters")
-    if chars then
-        for _, child in ipairs(chars:GetChildren()) do
-            local me = child.Name:lower():find(lp.Name:lower()) ~= nil or (displayName and child.Name:lower():find(displayName:lower()))
-            if not me then pcall(function() child:Destroy() end) end
-        end
-    end
-end
-
--- Re-exec across hops
 local function setupAutoExec()
     if not ReplicatedStorage:FindFirstChild("DiamondFarmMarker") then
-        local m = Instance.new("StringValue")
-        m.Name = "DiamondFarmMarker"
-        m.Value = "DiamondFarmScript"
-        m.Parent = ReplicatedStorage
+        local m = Instance.new("StringValue"); m.Name = "DiamondFarmMarker"; m.Value = "DiamondFarmScript"; m.Parent = ReplicatedStorage
     end
     if ReplicatedStorage:FindFirstChild("DiamondFarmTeleported") then
         ReplicatedStorage:FindFirstChild("DiamondFarmTeleported"):Destroy()
@@ -529,15 +621,12 @@ local function setupAutoExec()
     end
 end
 local function prepTeleport()
-    local flag = Instance.new("BoolValue")
-    flag.Name = "DiamondFarmTeleported"
-    flag.Value = true
-    flag.Parent = ReplicatedStorage
+    local flag = Instance.new("BoolValue"); flag.Name = "DiamondFarmTeleported"; flag.Value = true; flag.Parent = ReplicatedStorage
 end
 local function hopWithAuto()
     prepTeleport()
-    diamondsCollectedThisServer = 0
-    collectedDiamonds = {}
+    sessionDiamonds = 0
+    collected, active = {}, {}
     local ok = pcall(hopServer)
     if not ok then pcall(function() TeleportService:Teleport(placeId, lp) end) end
     return true
@@ -555,7 +644,7 @@ function startFarm()
             local maxT = (getgenv().MaxServerTime or 15)
             if maxT > 0 and (tick() - serverStart) > maxT then
                 if Label then Label.Text = "Auto-hopping (timeout)" end
-                safeSend("Auto-hop (timeout)")
+                gatedSend("Auto-hop (timeout)", sessionDiamonds, getDiamondCount(), "Max time reached")
                 hopWithAuto()
                 serverStart = tick()
                 task.wait(2)
@@ -564,7 +653,7 @@ function startFarm()
 
             if isDead() then
                 if Label then Label.Text = "Dead, hopping..." end
-                safeSend("Death hop")
+                gatedSend("Death hop", sessionDiamonds, getDiamondCount(), "Character dead")
                 hopWithAuto()
                 serverStart = tick()
                 task.wait(5)
@@ -587,7 +676,7 @@ function startFarm()
                 if hopCount >= 3 then
                     hopCount = 0
                     task.wait(1)
-                    safeSend("Periodic hop")
+                    gatedSend("Periodic hop", sessionDiamonds, getDiamondCount(), "Routine rotation")
                     hopWithAuto()
                     serverStart = tick()
                     task.wait(3)
@@ -603,7 +692,7 @@ end
 
 TeleportService.TeleportInitFailed:Connect(function(player, result, err)
     if Label then Label.Text = "Teleport failed" end
-    safeSend("Teleport failed; retrying")
+    gatedSend("Teleport failed; retrying", sessionDiamonds, getDiamondCount(), tostring(result or err or ""))
     task.wait(2)
     hopWithAuto()
 end)
