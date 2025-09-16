@@ -2,7 +2,7 @@
 
 local G=getgenv and getgenv() or _G
 G.Webhook=G.Webhook or (rawget(_G,"Webhook") or "")
-G.ReexecURL=G.ReexecURL or (rawget(_G,"ReexecURL") or "")
+G.ReexecURL=G.ReexecURL or (rawget(_G,"ReexecURL") or "https://raw.githubusercontent.com/hellattexyss/testfarm/refs/heads/main/farmv399upd")
 G.MaxServerTime=tonumber(G.MaxServerTime or rawget(_G,"MaxServerTime")) or 15
 
 local Pl=game:GetService("Players");local Tw=game:GetService("TweenService");local St=game:GetService("StarterGui")
@@ -259,3 +259,4 @@ if type(G.ReexecURL)=="string" and #G.ReexecURL>0 then
 else
     warn("Set ReexecURL to your Snippet A URL before running this loader")
 end
+
