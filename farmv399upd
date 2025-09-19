@@ -501,7 +501,6 @@ local function firePromptSafe(prompt)
     if typeof(fireproximityprompt) == "function" then
         return pcall(fireproximityprompt, prompt)
     end
-    -- fallback: simulate hold
     local ok = pcall(function()
         prompt.HoldDuration = 0
         prompt.Enabled = true
@@ -707,29 +706,90 @@ local function teleportToChest()
     return false
 end
 
--- Server hop
+-- ===================== Faster server hop (optimized) =====================
+
+local HopCache = {
+    nextCursor = nil,
+    visited = {},
+    visitedQueue = {},
+    maxVisited = 250,
+    lastRefresh = 0,
+}
+
+local function markVisited(id)
+    if HopCache.visited[id] then return end
+    HopCache.visited[id] = os.time()
+    table.insert(HopCache.visitedQueue, id)
+    if #HopCache.visitedQueue > HopCache.maxVisited then
+        local old = table.remove(HopCache.visitedQueue, 1)
+        HopCache.visited[old] = nil
+    end
+end
+
+local function fetchServerPage(cursor)
+    local base = "https://games.roblox.com/v1/games/"
+    local url = base .. PlaceID .. "/servers/Public?sortOrder=Asc&limit=100" .. (cursor and ("&cursor=" .. HttpService:UrlEncode(cursor)) or "")
+    local response = game:HttpGet(url)
+    return HttpService:JSONDecode(response)
+end
+
+local function collectCandidates(page)
+    local out = {}
+    if not page or not page.data then return out end
+    for _, s in ipairs(page.data) do
+        local playing = tonumber(s.playing) or 0
+        local maxp = tonumber(s.maxPlayers) or 0
+        local id = s.id
+        if id and id ~= game.JobId and playing < maxp and not HopCache.visited[id] then
+            local occupancy = (maxp > 0) and (playing / maxp) or 1
+            local score = occupancy * 100 + playing
+            table.insert(out, {id = id, playing = playing, maxp = maxp, score = score})
+        end
+    end
+    table.sort(out, function(a, b) return a.score < b.score end)
+    return out
+end
+
+local function chooseBest(cands)
+    if #cands == 0 then return nil end
+    local k = math.min(5, #cands)
+    return cands[math.random(1, k)].id
+end
+
+local function fastFindServer()
+    local now = os.clock()
+    local needFetch = (now - (HopCache.lastRefresh or 0)) > 2
+    local page
+
+    local ok, res = pcall(function() return fetchServerPage(HopCache.nextCursor) end)
+    if not ok then return nil end
+    page = res
+    HopCache.lastRefresh = now
+    HopCache.nextCursor = res and res.nextPageCursor or nil
+    if HopCache.nextCursor == nil then
+        HopCache.lastRefresh = 0
+    end
+
+    local cands = collectCandidates(page)
+    return chooseBest(cands)
+end
+
 local function hopServer()
     if DiamondCountLabel then DiamondCountLabel.Text = "Finding server..." end
-    local servers = {}
-    local success, result = pcall(function()
-        local url = "https://games.roblox.com/v1/games/" .. PlaceID .. "/servers/Public?sortOrder=Asc&limit=100"
-        local response = game:HttpGet(url)
-        return HttpService:JSONDecode(response)
-    end)
-    if success and result and result.data then
-        for _, s in ipairs(result.data) do
-            if s.playing < s.maxPlayers and s.id ~= game.JobId then
-                table.insert(servers, s.id)
-            end
-        end
-        if #servers > 0 then
-            TeleportService:TeleportToPlaceInstance(PlaceID, servers[math.random(1, #servers)], Player)
+    for i = 1, 3 do
+        local id = fastFindServer()
+        if id then
+            markVisited(id)
+            TeleportService:TeleportToPlaceInstance(PlaceID, id, Player)
             return true
         end
+        task.wait(0.15)
     end
     TeleportService:Teleport(PlaceID, Player)
     return true
 end
+
+-- =======================================================================
 
 -- Death detection + Characters cleanup
 local function isDead()
@@ -829,15 +889,16 @@ function startFarm()
                     end
                 end
 
+                -- Faster hop cadence
                 hopCount += 1
-                if hopCount >= 3 then
+                if hopCount >= 2 then
                     hopCount = 0
-                    task.wait(1)
+                    task.wait(0.15)
                     hopWithAuto()
                     serverStartTime = tick()
-                    task.wait(3)
+                    task.wait(0.25)
                 else
-                    task.wait(0.5)
+                    task.wait(0.25)
                 end
             else
                 task.wait(0.5)
@@ -846,12 +907,27 @@ function startFarm()
     end)
 end
 
-TeleportService.TeleportInitFailed:Connect(function()
-    if DiamondCountLabel then DiamondCountLabel.Text = "Teleport failed" end
-    task.wait(2)
+-- Faster failure retry
+pcall(function()
+    if _G.__Overhub_TIF_Conn then _G.__Overhub_TIF_Conn:Disconnect() end
+end)
+_G.__Overhub_TIF_Conn = TeleportService.TeleportInitFailed:Connect(function(_, result)
+    if DiamondCountLabel then DiamondCountLabel.Text = "Teleport failed, retrying..." end
+    task.wait(0.25)
     hopWithAuto()
 end)
 
+pcall(function()
+    if _G.__Overhub_TF_Conn then _G.__Overhub_TF_Conn:Disconnect() end
+    _G.__Overhub_TF_Conn = TeleportService.TeleportFailed:Connect(function(_, err)
+        if DiamondCountLabel then DiamondCountLabel.Text = "Teleport failed, retrying..." end
+        task.wait(0.25)
+        hopWithAuto()
+    end)
+end)
+
+-- Reduce max per-server time slightly for faster rotation, still overrideable
+getgenv().MaxServerTime = math.min(getgenv().MaxServerTime or 15, 10)
+
 setupAutoExec()
 startFarm()
-
