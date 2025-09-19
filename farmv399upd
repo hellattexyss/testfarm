@@ -1,6 +1,6 @@
 -- SNIPPET 1/2
 
-queue_on_teleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/hellattexyss/testfarm/refs/heads/main/farmv399upd"))()')  -- [attached_file:1]
+queue_on_teleport("loadstring(game:HttpGet('https://raw.githubusercontent.com/hellattexyss/testfarm/refs/heads/main/farmv399upd'))()")  -- [attached_file:1]
 
 local WEBHOOK_URL = rawget(getfenv() or _G, "Webhook") or _G.Webhook
 if type(WEBHOOK_URL) ~= "string" then WEBHOOK_URL = "" end  -- [attached_file:1]
@@ -651,3 +651,4 @@ end
 TeleportService.TeleportInitFailed:Connect(function() task.wait(0.6+math.random()*0.6) hopWithAuto("Teleport failed; retrying.") end)
 setupAutoReexecute()
 startFarmingLoop() [attached_file:1]
+
