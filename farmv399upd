@@ -491,12 +491,12 @@ local StarterGui = ui.StarterGui
 local RunService = ui.RunService
 local Debris = ui.Debris
 
--- Remotes/containers (per farmv399upd)
+-- Remotes/containers
 local RemoteEvents = ReplicatedStorage:WaitForChild("RemoteEvents")
 local TakeDiamonds = RemoteEvents:WaitForChild("RequestTakeDiamonds")
 local ItemsFolder = Workspace:WaitForChild("Items")
 
--- Safe proximity trigger: prefers fireproximityprompt, else emulate hold
+-- Safe proximity trigger
 local function firePromptSafe(prompt)
     if typeof(fireproximityprompt) == "function" then
         return pcall(fireproximityprompt, prompt)
@@ -514,7 +514,7 @@ end
 -- Config
 getgenv().MaxServerTime = getgenv().MaxServerTime or 15
 
--- Lag clear (non-lobby)
+-- Lag clear
 local function ClearLag()
     pcall(function()
         Lighting.GlobalShadows = false
@@ -634,10 +634,14 @@ local function collectDiamond(d)
     activeDiamonds[d] = true
     seenDiamonds[d] = true
     task.spawn(function()
-        while d.Parent and HRP do
+        local tries = 0
+        local before = getDiamondCount()
+        while d.Parent and HRP and tries < 150 do
+            tries += 1
             pcall(function() TakeDiamonds:FireServer(d) end)
             pcall(function() HRP.CFrame = d.CFrame + Vector3.new(0,3,0) end)
-            task.wait(0.02)
+            task.wait(0.03)
+            if getDiamondCount() > before then break end
         end
         activeDiamonds[d] = nil
     end)
@@ -652,20 +656,18 @@ ItemsFolder.ChildAdded:Connect(function(c)
     if tostring(c.Name):lower():find("diamond") then collectDiamond(c) end
 end)
 
--- Chest helpers
-local function fireChests()
-    local chests = {}
-    for _, obj in ipairs(Workspace:GetDescendants()) do
-        if (obj:IsA("Model") or obj:IsA("Part")) and tostring(obj.Name):lower():find("chest") then
-            for _, child in ipairs(obj:GetDescendants()) do
-                if child:IsA("ProximityPrompt") then table.insert(chests, child) end
-            end
-        end
+-- Chest helpers (improved: force-trigger, then wait for diamonds)
+local function fireNearbyPrompts(model, attempts)
+    attempts = attempts or 10
+    local prompts = {}
+    for _, child in ipairs(model:GetDescendants()) do
+        if child:IsA("ProximityPrompt") then table.insert(prompts, child) end
     end
-    for _, prompt in ipairs(chests) do
-        task.spawn(function()
-            for i = 1, 6 do firePromptSafe(prompt); task.wait(0.05) end
-        end)
+    for _ = 1, attempts do
+        for _, prompt in ipairs(prompts) do
+            task.spawn(function() firePromptSafe(prompt) end)
+        end
+        task.wait(0.08)
     end
 end
 
@@ -690,35 +692,56 @@ local function findStrongholdChest()
     return nil
 end
 
-local function teleportToChest()
+local function teleportToChestAndCollect()
     if not HRP then return false end
     local chestPart = findStrongholdChest()
-    if chestPart then
-        if DiamondCountLabel then DiamondCountLabel.Text = "Teleporting to chest..." end
-        pcall(function() HRP.CFrame = chestPart.CFrame + Vector3.new(0, 5, 0) end)
-        for _, child in ipairs(chestPart.Parent:GetDescendants()) do
-            if child:IsA("ProximityPrompt") then
-                for i = 1, 8 do firePromptSafe(child); task.wait(0.05) end
+    if not chestPart then return false end
+
+    if DiamondCountLabel then DiamondCountLabel.Text = "Teleporting to chest..." end
+    pcall(function() HRP.CFrame = chestPart.CFrame + Vector3.new(0, 5, 0) end)
+
+    local chestModel = chestPart.Parent
+    fireNearbyPrompts(chestModel, 14)
+
+    -- Wait for diamond drops and collect before hopping
+    local before = getDiamondCount()
+    local t0 = tick()
+    local collected = false
+
+    -- Scan for up to 4 seconds for new diamonds near the chest, then 1.5s reserve for collecting
+    while tick() - t0 < 5.5 do
+        pcall(scanDiamonds)
+        task.wait(0.08)
+        local now = getDiamondCount()
+        if now > before then
+            collected = true
+            before = now
+            -- keep sweeping shortly to grab remaining
+            local sweepEnd = tick() + 1.25
+            while tick() < sweepEnd do
+                pcall(scanDiamonds)
+                task.wait(0.06)
             end
+            break
         end
-        return true
     end
-    return false
+
+    return collected
 end
 
--- ===================== Faster server hop (optimized) =====================
+-- ===================== Strict not-full server hopping =====================
 
 local HopCache = {
     nextCursor = nil,
     visited = {},
     visitedQueue = {},
     maxVisited = 250,
-    lastRefresh = 0,
+    lastCursorReset = 0,
 }
 
 local function markVisited(id)
     if HopCache.visited[id] then return end
-    HopCache.visited[id] = os.time()
+    HopCache.visited[id] = true
     table.insert(HopCache.visitedQueue, id)
     if #HopCache.visitedQueue > HopCache.maxVisited then
         local old = table.remove(HopCache.visitedQueue, 1)
@@ -733,6 +756,8 @@ local function fetchServerPage(cursor)
     return HttpService:JSONDecode(response)
 end
 
+-- Strict filter: never choose full servers; keep headroom to avoid race joins
+local HEADROOM = 1 -- require at least 1 free slot
 local function collectCandidates(page)
     local out = {}
     if not page or not page.data then return out end
@@ -740,50 +765,50 @@ local function collectCandidates(page)
         local playing = tonumber(s.playing) or 0
         local maxp = tonumber(s.maxPlayers) or 0
         local id = s.id
-        if id and id ~= game.JobId and playing < maxp and not HopCache.visited[id] then
-            local occupancy = (maxp > 0) and (playing / maxp) or 1
+        local free = maxp - playing
+        if id and id ~= game.JobId and maxp > 0 and free >= HEADROOM and not HopCache.visited[id] then
+            local occupancy = playing / maxp
             local score = occupancy * 100 + playing
-            table.insert(out, {id = id, playing = playing, maxp = maxp, score = score})
+            table.insert(out, {id = id, free = free, playing = playing, maxp = maxp, score = score})
         end
     end
-    table.sort(out, function(a, b) return a.score < b.score end)
+    table.sort(out, function(a, b)
+        if a.free ~= b.free then return a.free > b.free end
+        return a.score < b.score
+    end)
     return out
 end
 
 local function chooseBest(cands)
     if #cands == 0 then return nil end
+    -- Pick among best 5 with most free slots to avoid stampeding
     local k = math.min(5, #cands)
     return cands[math.random(1, k)].id
 end
 
 local function fastFindServer()
-    local now = os.clock()
-    local needFetch = (now - (HopCache.lastRefresh or 0)) > 2
-    local page
-
     local ok, res = pcall(function() return fetchServerPage(HopCache.nextCursor) end)
-    if not ok then return nil end
-    page = res
-    HopCache.lastRefresh = now
-    HopCache.nextCursor = res and res.nextPageCursor or nil
-    if HopCache.nextCursor == nil then
-        HopCache.lastRefresh = 0
+    if not ok or not res then return nil end
+    local cands = collectCandidates(res)
+    -- advance cursor for next call
+    HopCache.nextCursor = res.nextPageCursor
+    if not HopCache.nextCursor then
+        -- loop back after finishing pages
+        HopCache.nextCursor = nil
     end
-
-    local cands = collectCandidates(page)
     return chooseBest(cands)
 end
 
 local function hopServer()
-    if DiamondCountLabel then DiamondCountLabel.Text = "Finding server..." end
-    for i = 1, 3 do
+    if DiamondCountLabel then DiamondCountLabel.Text = "Finding non-full server..." end
+    for i = 1, 4 do
         local id = fastFindServer()
         if id then
             markVisited(id)
             TeleportService:TeleportToPlaceInstance(PlaceID, id, Player)
             return true
         end
-        task.wait(0.15)
+        task.wait(0.12)
     end
     TeleportService:Teleport(PlaceID, Player)
     return true
@@ -877,19 +902,21 @@ function startFarm()
             end
 
             if Player.Character and HRP then
-                pcall(fireChests)
                 pcall(scanDiamonds)
 
                 chestCheck += 1
                 if chestCheck >= 1 then
                     chestCheck = 0
-                    if teleportToChest() then
-                        if DiamondCountLabel then DiamondCountLabel.Text = "Found chest!" end
-                        task.wait(1)
+                    local collected = teleportToChestAndCollect()
+                    if collected then
+                        if DiamondCountLabel then DiamondCountLabel.Text = "Chest collected!" end
+                        task.wait(0.6)
+                    else
+                        if DiamondCountLabel then DiamondCountLabel.Text = "Chest not ready" end
                     end
                 end
 
-                -- Faster hop cadence
+                -- Faster hop cadence (unchanged from previous fast version)
                 hopCount += 1
                 if hopCount >= 2 then
                     hopCount = 0
