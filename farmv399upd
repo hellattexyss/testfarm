@@ -636,7 +636,7 @@ local function collectDiamond(d)
     task.spawn(function()
         local tries = 0
         local before = getDiamondCount()
-        while d.Parent and HRP and tries < 150 do
+        while d.Parent and HRP and tries < 160 do
             tries += 1
             pcall(function() TakeDiamonds:FireServer(d) end)
             pcall(function() HRP.CFrame = d.CFrame + Vector3.new(0,3,0) end)
@@ -656,9 +656,9 @@ ItemsFolder.ChildAdded:Connect(function(c)
     if tostring(c.Name):lower():find("diamond") then collectDiamond(c) end
 end)
 
--- Chest helpers (improved: force-trigger, then wait for diamonds)
+-- Chest helpers: collect-first, then decide
 local function fireNearbyPrompts(model, attempts)
-    attempts = attempts or 10
+    attempts = attempts or 12
     local prompts = {}
     for _, child in ipairs(model:GetDescendants()) do
         if child:IsA("ProximityPrompt") then table.insert(prompts, child) end
@@ -692,41 +692,61 @@ local function findStrongholdChest()
     return nil
 end
 
-local function teleportToChestAndCollect()
+-- Key fix: never label “not ready” and hop immediately; instead, allow a bounded sweep window to confirm
+local function chestCollectRoutine()
     if not HRP then return false end
     local chestPart = findStrongholdChest()
     if not chestPart then return false end
 
-    if DiamondCountLabel then DiamondCountLabel.Text = "Teleporting to chest..." end
+    if DiamondCountLabel then DiamondCountLabel.Text = "Chest found, opening..." end
     pcall(function() HRP.CFrame = chestPart.CFrame + Vector3.new(0, 5, 0) end)
 
     local chestModel = chestPart.Parent
-    fireNearbyPrompts(chestModel, 14)
+    fireNearbyPrompts(chestModel, 16)
 
-    -- Wait for diamond drops and collect before hopping
-    local before = getDiamondCount()
+    -- Stabilization: sweep for diamonds and wait for counter increase or visible spawns
+    local baseline = getDiamondCount()
     local t0 = tick()
-    local collected = false
+    local sawSpawn = false
+    local function nearbyDiamonds()
+        local found = 0
+        for _, d in ipairs(ItemsFolder:GetChildren()) do
+            if tostring(d.Name):lower():find("diamond") then
+                if HRP and (HRP.Position - d.Position).Magnitude <= 100 then
+                    found += 1
+                end
+            end
+        end
+        return found
+    end
 
-    -- Scan for up to 4 seconds for new diamonds near the chest, then 1.5s reserve for collecting
-    while tick() - t0 < 5.5 do
+    while tick() - t0 < 6.0 do
         pcall(scanDiamonds)
         task.wait(0.08)
         local now = getDiamondCount()
-        if now > before then
-            collected = true
-            before = now
-            -- keep sweeping shortly to grab remaining
-            local sweepEnd = tick() + 1.25
+        if now > baseline then
+            -- keep sweeping briefly to grab leftovers
+            local sweepEnd = tick() + 1.2
             while tick() < sweepEnd do
                 pcall(scanDiamonds)
                 task.wait(0.06)
             end
-            break
+            return true
+        end
+        if nearbyDiamonds() > 0 then
+            sawSpawn = true
+            -- stay a bit longer to finish collection if they just spawned
+            local finishEnd = tick() + 1.5
+            while tick() < finishEnd do
+                pcall(scanDiamonds)
+                task.wait(0.06)
+                if getDiamondCount() > baseline then return true end
+            end
         end
     end
 
-    return collected
+    -- If never saw spawns and no count increase, consider chest dry; do not spam “not ready”
+    return false
 end
 
 -- ===================== Strict not-full server hopping =====================
@@ -736,7 +756,6 @@ local HopCache = {
     visited = {},
     visitedQueue = {},
     maxVisited = 250,
-    lastCursorReset = 0,
 }
 
 local function markVisited(id)
@@ -756,8 +775,7 @@ local function fetchServerPage(cursor)
     return HttpService:JSONDecode(response)
 end
 
--- Strict filter: never choose full servers; keep headroom to avoid race joins
-local HEADROOM = 1 -- require at least 1 free slot
+local HEADROOM = 1
 local function collectCandidates(page)
     local out = {}
     if not page or not page.data then return out end
@@ -768,21 +786,20 @@ local function collectCandidates(page)
         local free = maxp - playing
         if id and id ~= game.JobId and maxp > 0 and free >= HEADROOM and not HopCache.visited[id] then
             local occupancy = playing / maxp
-            local score = occupancy * 100 + playing
-            table.insert(out, {id = id, free = free, playing = playing, maxp = maxp, score = score})
+            local score = (1 - occupancy) * 100 + free
+            table.insert(out, {id = id, free = free, score = score})
         end
     end
     table.sort(out, function(a, b)
         if a.free ~= b.free then return a.free > b.free end
-        return a.score < b.score
+        return a.score > b.score
     end)
     return out
 end
 
 local function chooseBest(cands)
     if #cands == 0 then return nil end
-    -- Pick among best 5 with most free slots to avoid stampeding
-    local k = math.min(5, #cands)
+    local k = math.min(6, #cands)
     return cands[math.random(1, k)].id
 end
 
@@ -790,25 +807,21 @@ local function fastFindServer()
     local ok, res = pcall(function() return fetchServerPage(HopCache.nextCursor) end)
     if not ok or not res then return nil end
     local cands = collectCandidates(res)
-    -- advance cursor for next call
     HopCache.nextCursor = res.nextPageCursor
-    if not HopCache.nextCursor then
-        -- loop back after finishing pages
-        HopCache.nextCursor = nil
-    end
+    if not HopCache.nextCursor then HopCache.nextCursor = nil end
     return chooseBest(cands)
 end
 
 local function hopServer()
     if DiamondCountLabel then DiamondCountLabel.Text = "Finding non-full server..." end
-    for i = 1, 4 do
+    for _ = 1, 5 do
         local id = fastFindServer()
         if id then
             markVisited(id)
             TeleportService:TeleportToPlaceInstance(PlaceID, id, Player)
             return true
         end
-        task.wait(0.12)
+        task.wait(0.1)
     end
     TeleportService:Teleport(PlaceID, Player)
     return true
@@ -879,10 +892,10 @@ local function hopWithAuto()
     return true
 end
 
--- Main loop
+-- Main loop: attempt chest collect first; hop decisions only after bounded collect routine
 function startFarm()
     task.spawn(function()
-        local hopCount, chestCheck = 0, 0
+        local hopCount = 0
         local serverStartTime = tick()
         while true do
             cleanChars()
@@ -902,30 +915,32 @@ function startFarm()
             end
 
             if Player.Character and HRP then
-                pcall(scanDiamonds)
-
-                chestCheck += 1
-                if chestCheck >= 1 then
-                    chestCheck = 0
-                    local collected = teleportToChestAndCollect()
-                    if collected then
-                        if DiamondCountLabel then DiamondCountLabel.Text = "Chest collected!" end
-                        task.wait(0.6)
-                    else
-                        if DiamondCountLabel then DiamondCountLabel.Text = "Chest not ready" end
+                -- First, try chest routine fully
+                local got = chestCollectRoutine()
+                if got then
+                    if DiamondCountLabel then DiamondCountLabel.Text = "Chest collected!" end
+                    -- small sweep to ensure all drops grabbed
+                    local endSweep = tick() + 0.8
+                    while tick() < endSweep do
+                        pcall(scanDiamonds)
+                        task.wait(0.06)
                     end
+                    -- do not force hop immediately; let loop continue to gather stray diamonds
+                else
+                    -- No collection happened; still do ambient scans
+                    pcall(scanDiamonds)
                 end
 
-                -- Faster hop cadence (unchanged from previous fast version)
+                -- Aggressive hop cadence remains, but after chest routine
                 hopCount += 1
                 if hopCount >= 2 then
                     hopCount = 0
-                    task.wait(0.15)
+                    task.wait(0.12)
                     hopWithAuto()
                     serverStartTime = tick()
-                    task.wait(0.25)
+                    task.wait(0.22)
                 else
-                    task.wait(0.25)
+                    task.wait(0.22)
                 end
             else
                 task.wait(0.5)
