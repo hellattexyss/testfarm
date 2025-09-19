@@ -1,5 +1,5 @@
 -- Auto-execute across teleports (always TRUE)
-queue_on_teleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/Rx1m/CpsHub/refs/heads/main/Cpsnerfv2"))()')  -- from farmv399upd.txt
+queue_on_teleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/hellattexyss/testfarm/refs/heads/main/farmv399upd"))()')  -- from farmv399upd.txt
 
 -- Auto party/teleport add spam (as-is, only in lobby place)
 if game.PlaceId == 79546208627805 then
@@ -863,3 +863,4 @@ end)
 
 setupAutoExec()
 startFarm()
+
