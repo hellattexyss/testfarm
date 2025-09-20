@@ -5,7 +5,7 @@ do
     local env = getfenv and getfenv() or _G
     local qot = (env and rawget(env,"queue_on_teleport")) or _G.queue_on_teleport
     if type(qot) == "function" then
-        qot('loadstring(game:HttpGet("https://raw.githubusercontent.com/hellattexyss/testfarm/refs/heads/main/farmv399upd"))()')
+        qot("loadstring(game:HttpGet('https://raw.githubusercontent.com/hellattexyss/testfarm/refs/heads/main/farmv399upd'))()")
     end
 end  -- [attached_file:1]
 
@@ -647,3 +647,4 @@ end
 TeleportService.TeleportInitFailed:Connect(function() task.wait(0.6+math.random()*0.6) hopWithAuto("Teleport failed; retrying.") end)
 setupAutoReexecute()
 startFarmingLoop()
+
