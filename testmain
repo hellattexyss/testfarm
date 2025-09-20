@@ -1,6 +1,63 @@
--- Auto-execute across teleports (always TRUE)
+-- Teleport re-exec compatibility (handles nil queue_on_teleport/queueonteleport)
+local function safeQueueOnTeleport(codeChunk)
+    local ok = false
+    local q1 = rawget(_G, "queue_on_teleport") or getfenv and rawget(getfenv(), "queue_on_teleport")
+    local q2 = rawget(_G, "queueonteleport") or getfenv and rawget(getfenv(), "queueonteleport")
 
-queue_on_teleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/hellattexyss/testfarm/refs/heads/main/testmain"))()') -- [attached_file:1]
+    -- Prefer native if available
+    if type(q1) == "function" then
+        local s, e = pcall(q1, codeChunk)
+        ok = s
+    elseif type(q2) == "function" then
+        local s, e = pcall(q2, codeChunk)
+        ok = s
+    end
+
+    if ok then return true end
+
+    -- Fallback: manual re-exec on teleport for executors without queue APIs
+    -- Stores code chunk and runs it after teleport initializes.
+    local TeleportService = game:GetService("TeleportService")
+    local Players = game:GetService("Players")
+    local HttpService = game:GetService("HttpService")
+
+    local stash = Instance.new("StringValue")
+    stash.Name = "OverhubQueueChunk"
+    stash.Value = codeChunk
+    stash.Parent = game:GetService("ReplicatedStorage")
+
+    -- Try to hook both init and arrival
+    TeleportService.TeleportInitFailed:Connect(function() end)
+    local function runChunk()
+        local fn, err = loadstring(stash.Value)
+        if fn then
+            local ok2, er2 = pcall(fn)
+        end
+    end
+
+    -- If the executor later injects queue_on_teleport, use it
+    task.spawn(function()
+        for _ = 1, 40 do
+            local qq1 = rawget(_G, "queue_on_teleport")
+            local qq2 = rawget(_G, "queueonteleport")
+            if type(qq1) == "function" then pcall(qq1, codeChunk) return true end
+            if type(qq2) == "function" then pcall(qq2, codeChunk) return true end
+            task.wait(0.1)
+        end
+    end)
+
+    -- As a final fallback, re-run on next character spawn (post-teleport)
+    local lp = Players.LocalPlayer
+    if lp then
+        lp.CharacterAdded:Connect(function()
+            task.delay(0.5, runChunk)
+        end)
+    end
+
+    return false
+end
+
+safeQueueOnTeleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/hellattexyss/testfarm/refs/heads/main/testmain"))()')
 
 -- Auto party / teleport add spam (as-is)
 
