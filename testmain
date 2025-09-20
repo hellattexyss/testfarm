@@ -1,6 +1,6 @@
 -- Auto-execute across teleports (always TRUE)
 
-queue_on_teleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/hellattexyss/testfarm/refs/heads/main/testmain"))()') -- [attached_file:1]
+queue_on_teleport("loadstring(game:HttpGet('https://raw.githubusercontent.com/hellattexyss/testfarm/refs/heads/main/testmain'))()") -- [attached_file:1]
 
 -- Auto party / teleport add spam (as-is)
 
